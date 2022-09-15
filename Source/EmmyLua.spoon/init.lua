@@ -191,7 +191,7 @@ function M.create(jsonDocs, prefix)
         error("Expected a module, but found type=" .. module.type)
       end
       local fname = options.annotations .. "/" .. module.name .. ".lua"
-      print("creating " .. fname)
+      -- print("creating " .. fname)
       local fd = io.open(fname, "w+")
       io.output(fd)
       M.processModule(module)
