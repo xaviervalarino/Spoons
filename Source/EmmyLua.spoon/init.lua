@@ -47,6 +47,11 @@ local options = {
   },
 }
 
+M.last_generated = {
+  time = hs.settings.get("EmmyLua Last Generated") or {},
+  updated = false,
+}
+
 M.spoonPath = hs.spoons.scriptPath()
 
 function M.comment(str, commentStr)
@@ -173,37 +178,46 @@ end
 
 function M.create(jsonDocs, prefix)
   local mtime = hs.fs.attributes(jsonDocs, "modification")
-  prefix = prefix or ""
-  local data = hs.json.read(jsonDocs)
-  for _, module in ipairs(data) do
-    if module.type ~= "Module" then
-      error("Expected a module, but found type=" .. module.type)
-    end
-    module.prefix = prefix
-    module.name = prefix .. module.name
-    local fname = options.annotations .. "/" .. module.name .. ".lua"
-    local fmtime = hs.fs.attributes(fname, "modification")
-    if fmtime == nil or mtime > fmtime then
-      -- print("creating " .. fname)
+  local gen_prefix = prefix or "hs"
+  local gen_time = M.last_generated.time[gen_prefix]
+  local m_prefix = prefix:gsub("%..*$", ".")
+  m_prefix = m_prefix == "hs" and "" or m_prefix
+  if gen_time == nil or mtime > gen_time then
+    local data = hs.json.read(jsonDocs)
+    for _, module in ipairs(data) do
+      module.prefix = m_prefix
+      module.name = m_prefix .. module.name
+      if module.type ~= "Module" then
+        error("Expected a module, but found type=" .. module.type)
+      end
+      local fname = options.annotations .. "/" .. module.name .. ".lua"
+      print("creating " .. fname)
       local fd = io.open(fname, "w+")
       io.output(fd)
       M.processModule(module)
       io.close(fd)
     end
+    M.last_generated.time[gen_prefix] = os.time()
+    M.last_generated.updated = true
   end
 end
 
 function M:init()
   hs.fs.mkdir(options.annotations)
   -- Load hammerspoon docs
-  M.create(hs.docstrings_json_file)
+  M.create(hs.docstrings_json_file, "hs")
 
   -- Load Spoons
   for _, spoon in ipairs(hs.spoons.list()) do
     local doc = hs.configdir .. "/Spoons/" .. spoon.name .. ".spoon/docs.json"
+    local prefix = "spoon." .. spoon.name
     if hs.fs.attributes(doc, "modification") then
-      M.create(doc, "spoon.")
+      M.create(doc, prefix)
     end
+  end
+
+  if M.last_generated.updated then
+    hs.settings.set("EmmyLua Last Generated", M.last_generated.time)
   end
 end
 
